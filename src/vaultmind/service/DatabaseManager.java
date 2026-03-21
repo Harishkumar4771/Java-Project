@@ -71,6 +71,25 @@ public class DatabaseManager {
         }
     }
 
+    // Get all users (admin only)
+    public static void getAllUsers() {
+        String sql = "SELECT user_id, username, role, created_at FROM users";
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            ResultSet rs = stmt.executeQuery();
+            System.out.println("\n===== ALL USERS =====");
+            while (rs.next()) {
+                System.out.println("ID: " + rs.getInt("user_id") +
+                        " | Username: " + rs.getString("username") +
+                        " | Role: " + rs.getString("role") +
+                        " | Joined: " + rs.getString("created_at"));
+            }
+            System.out.println("=====================");
+        } catch (SQLException e) {
+            System.out.println("Error fetching users: " + e.getMessage());
+        }
+    }
+
     public static void testConnection() {
         try {
             Connection conn = getConnection();

@@ -32,6 +32,18 @@ public class Main {
                 String[] user = DatabaseManager.getUser(username);
                 if (user != null && user[1].equals(DatabaseManager.hashPassword(password))) {
                     System.out.println("Login successful! Welcome, " + user[0] + " [" + user[2] + "]");
+
+                    if (user[2].equals("admin")) {
+                        System.out.println("\nAdmin Panel:");
+                        System.out.println("1. View all users");
+                        System.out.println("2. Logout");
+                        System.out.print("Enter choice: ");
+                        int adminChoice = scanner.nextInt();
+                        scanner.nextLine();
+                        if (adminChoice == 1) {
+                            DatabaseManager.getAllUsers();
+                        }
+                    }
                 } else {
                     System.out.println("Invalid username or password.");
                 }
