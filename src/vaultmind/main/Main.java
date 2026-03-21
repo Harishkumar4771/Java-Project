@@ -22,8 +22,7 @@ public class Main {
                 String username = scanner.nextLine();
                 System.out.print("Enter password: ");
                 String password = scanner.nextLine();
-                DatabaseManager.addUser(username, password, "user");
-
+                DatabaseManager.addUser(username, DatabaseManager.hashPassword(password), "user");
             } else if (choice == 2) {
                 System.out.print("Enter username: ");
                 String username = scanner.nextLine();
@@ -31,7 +30,7 @@ public class Main {
                 String password = scanner.nextLine();
 
                 String[] user = DatabaseManager.getUser(username);
-                if (user != null && user[1].equals(password)) {
+                if (user != null && user[1].equals(DatabaseManager.hashPassword(password))) {
                     System.out.println("Login successful! Welcome, " + user[0] + " [" + user[2] + "]");
                 } else {
                     System.out.println("Invalid username or password.");

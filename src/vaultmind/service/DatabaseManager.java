@@ -53,6 +53,24 @@ public class DatabaseManager {
         return null;
     }
 
+    // Hash a password using SHA-256
+    public static String hashPassword(String password) {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(password.getBytes());
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : hash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) hexString.append('0');
+                hexString.append(hex);
+            }
+            return hexString.toString();
+        } catch (Exception e) {
+            System.out.println("Hashing failed: " + e.getMessage());
+            return null;
+        }
+    }
+
     public static void testConnection() {
         try {
             Connection conn = getConnection();
