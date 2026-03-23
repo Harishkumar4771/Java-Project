@@ -31,4 +31,24 @@ public class EncryptionService{
             while ((read = fis.read(buffer)) != -1) {
                 cos.write(buffer, 0, read);}}
     }
-}
+    public static void decryptFile(String encryptedFilePath,SecretKey key) throws Exception{
+        try (FileInputStream fis = new FileInputStream(encryptedFilePath)) {
+            byte[] iv = new byte[12];
+            int ivRead = fis.read(iv);
+            if (ivRead != 12) {
+                throw new Exception("Invalid IV length in encrypted file.");
+            }
+            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+            GCMParameterSpec spec = new GCMParameterSpec(128, iv);
+            cipher.init(Cipher.DECRYPT_MODE, key, spec);
+            String outputFilePath = encryptedFilePath.replace(".enc", ".dec");
+            try (FileOutputStream fos = new FileOutputStream(outputFilePath);
+                 javax.crypto.CipherInputStream cis = new javax.crypto.CipherInputStream(fis, cipher)) {
+
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = cis.read(buffer)) != -1) {
+                    fos.write(buffer, 0, read);
+                }
+            }
+        }}}
