@@ -23,8 +23,8 @@ bin/
 /nbdist/
 /.nb-gradle/
 
-### VS Code ###
-.vscode/
+problem_statement.txt
+
 
 ### Mac OS ###
 .DS_Store
