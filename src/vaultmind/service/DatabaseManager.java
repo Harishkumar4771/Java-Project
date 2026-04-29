@@ -208,4 +208,25 @@ public class DatabaseManager {
                 uploadedAt == null ? "" : uploadedAt.toLocalDateTime().toString()
         );
     }
+    public static boolean deleteFile(int fileId, int userId) throws SQLException {
+        String sql = "DELETE FROM vault_files WHERE file_id = ? AND user_id = ?";
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, fileId);
+            stmt.setInt(2, userId);
+            int rows = stmt.executeUpdate();
+            return rows > 0;
+        }
+    }
+    public static boolean updateFileName(int fileId, int userId, String newFileName) throws SQLException {
+        String sql = "UPDATE vault_files SET file_name = ? WHERE file_id = ? AND user_id = ?";
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, newFileName);
+            stmt.setInt(2, fileId);
+            stmt.setInt(3, userId);
+            int rows = stmt.executeUpdate();
+            return rows > 0;
+        }
+    }
 }

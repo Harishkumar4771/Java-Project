@@ -8,6 +8,9 @@ import vaultmind.model.User;
 import vaultmind.model.VaultFile;
 import vaultmind.service.DatabaseManager;
 import vaultmind.service.EncryptionService;
+import vaultmind.exception.EncryptionFailedException;
+import vaultmind.exception.FileAccessException;
+import vaultmind.exception.UserNotFoundException;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -60,6 +63,8 @@ public class WebServer {
         server.createContext("/dashboard", wrap(this::handleDashboard));
         server.createContext("/files", wrap(this::handleFileCreate));
         server.createContext("/files/view", wrap(this::handleFileView));
+        server.createContext("/files/delete", wrap(this::handleFileDelete));
+        server.createContext("/files/rename", wrap(this::handleFileRename));
         server.createContext("/logout", wrap(this::handleLogout));
         server.createContext("/favicon.ico", exchange -> sendResponse(exchange, 204, "", "text/plain; charset=UTF-8"));
     }
@@ -68,6 +73,12 @@ public class WebServer {
         return exchange -> {
             try {
                 handler.handle(exchange);
+            } catch (UserNotFoundException e) {
+                sendResponse(exchange, 401, HtmlRenderer.renderLoginPage("Invalid username or password.", false), "text/html; charset=UTF-8");
+            } catch (EncryptionFailedException e) {
+                sendResponse(exchange, 500, HtmlRenderer.renderErrorPage("Encryption Error", e.getMessage()), "text/html; charset=UTF-8");
+            } catch (FileAccessException e) {
+                sendResponse(exchange, 403, HtmlRenderer.renderErrorPage("Access Denied", e.getMessage()), "text/html; charset=UTF-8");
             } catch (SQLException e) {
                 sendResponse(exchange, 500, HtmlRenderer.renderErrorPage("Database Error", e.getMessage()), "text/html; charset=UTF-8");
             } catch (Exception e) {
@@ -101,9 +112,12 @@ public class WebServer {
         }
 
         User user = DatabaseManager.getUserByUsername(username);
-        String hashedPassword = DatabaseManager.hashPassword(password);
+        if (user == null) {
+            throw new UserNotFoundException(username);
+        }
 
-        if (user == null || hashedPassword == null || !hashedPassword.equals(user.getPasswordHash())) {
+        String hashedPassword = DatabaseManager.hashPassword(password);
+        if (hashedPassword == null || !hashedPassword.equals(user.getPasswordHash())) {
             sendResponse(exchange, 401, HtmlRenderer.renderLoginPage("Invalid username or password.", false), "text/html; charset=UTF-8");
             return;
         }
@@ -193,7 +207,7 @@ public class WebServer {
             String bodyStr = new String(body, StandardCharsets.ISO_8859_1);
             int fileStart = bodyStr.indexOf("\r\n\r\n") + 4;
             int fileEnd = bodyStr.lastIndexOf("\r\n--" + boundary);
-            
+
             if (fileStart < 4 || fileEnd <= fileStart) throw new Exception("Could not parse file.");
 
             String fileName = "uploaded_file";
@@ -206,11 +220,19 @@ public class WebServer {
             byte[] fileContent = new byte[fileEnd - fileStart];
             System.arraycopy(body, fileStart, fileContent, 0, fileContent.length);
 
-            byte[] encrypted = vaultmind.service.EncryptionService.encrypt(fileContent, session.getUsername() + "vault-secret");
+            byte[] encrypted;
+            try {
+                encrypted = EncryptionService.encrypt(fileContent, session.getUsername() + "vault-secret");
+            } catch (Exception e) {
+                throw new EncryptionFailedException("Failed to encrypt file: " + fileName, e);
+            }
+
             DatabaseManager.addFile(session.getUserId(), fileName, "Stored in Database", encrypted);
-            
+
             List<VaultFile> files = DatabaseManager.getFilesByUser(session.getUserId());
             sendResponse(exchange, 200, HtmlRenderer.renderUserDashboard(session, files, "File encrypted and saved.", true), "text/html; charset=UTF-8");
+        } catch (EncryptionFailedException e) {
+            throw e;
         } catch (Exception e) {
             sendResponse(exchange, 500, HtmlRenderer.renderErrorPage("Upload Error", e.getMessage()), "text/html; charset=UTF-8");
         }
@@ -226,8 +248,7 @@ public class WebServer {
         if (session == null) return;
 
         if ("admin".equalsIgnoreCase(session.getRole())) {
-            sendResponse(exchange, 403, HtmlRenderer.renderErrorPage("Forbidden", "Admins cannot open decrypted user files."), "text/html; charset=UTF-8");
-            return;
+            throw new FileAccessException("Admins cannot open decrypted user files.");
         }
 
         Integer fileId = parsePositiveInt(readQueryParams(exchange).get("id"));
@@ -238,8 +259,7 @@ public class WebServer {
 
         VaultFile file = DatabaseManager.getFileByIdForUser(fileId, session.getUserId());
         if (file == null || file.getFileContent() == null) {
-            sendResponse(exchange, 404, HtmlRenderer.renderErrorPage("Not Found", "Encrypted file record was not found."), "text/html; charset=UTF-8");
-            return;
+            throw new FileAccessException("Encrypted file record was not found or you do not have access.");
         }
 
         byte[] responseBytes = null;
@@ -257,6 +277,71 @@ public class WebServer {
             if (responseBytes != null) {
                 Arrays.fill(responseBytes, (byte) 0);
             }
+        }
+    }
+
+    private void handleFileDelete(HttpExchange exchange) throws IOException, SQLException {
+        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+            methodNotAllowed(exchange);
+            return;
+        }
+
+        SessionManager.Session session = requireSession(exchange);
+        if (session == null) return;
+
+        if ("admin".equalsIgnoreCase(session.getRole())) {
+            sendResponse(exchange, 403, HtmlRenderer.renderErrorPage("Forbidden", "Admins cannot delete user files."), "text/html; charset=UTF-8");
+            return;
+        }
+
+        Map<String, String> formData = readFormData(exchange);
+        Integer fileId = parsePositiveInt(formData.get("fileId"));
+
+        if (fileId == null) {
+            sendResponse(exchange, 400, HtmlRenderer.renderErrorPage("Bad Request", "A valid file id is required."), "text/html; charset=UTF-8");
+            return;
+        }
+
+        boolean deleted = DatabaseManager.deleteFile(fileId, session.getUserId());
+        List<VaultFile> files = DatabaseManager.getFilesByUser(session.getUserId());
+
+        if (deleted) {
+            sendResponse(exchange, 200, HtmlRenderer.renderUserDashboard(session, files, "File deleted successfully.", true), "text/html; charset=UTF-8");
+        } else {
+            sendResponse(exchange, 404, HtmlRenderer.renderUserDashboard(session, files, "File not found or access denied.", false), "text/html; charset=UTF-8");
+        }
+    }
+
+    private void handleFileRename(HttpExchange exchange) throws IOException, SQLException {
+        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+            methodNotAllowed(exchange);
+            return;
+        }
+
+        SessionManager.Session session = requireSession(exchange);
+        if (session == null) return;
+
+        if ("admin".equalsIgnoreCase(session.getRole())) {
+            sendResponse(exchange, 403, HtmlRenderer.renderErrorPage("Forbidden", "Admins cannot rename user files."), "text/html; charset=UTF-8");
+            return;
+        }
+
+        Map<String, String> formData = readFormData(exchange);
+        Integer fileId = parsePositiveInt(formData.get("fileId"));
+        String newFileName = trimmed(formData.get("newFileName"));
+
+        if (fileId == null || newFileName.isBlank()) {
+            sendResponse(exchange, 400, HtmlRenderer.renderErrorPage("Bad Request", "File id and new name are required."), "text/html; charset=UTF-8");
+            return;
+        }
+
+        boolean updated = DatabaseManager.updateFileName(fileId, session.getUserId(), newFileName);
+        List<VaultFile> files = DatabaseManager.getFilesByUser(session.getUserId());
+
+        if (updated) {
+            sendResponse(exchange, 200, HtmlRenderer.renderUserDashboard(session, files, "File renamed successfully.", true), "text/html; charset=UTF-8");
+        } else {
+            sendResponse(exchange, 404, HtmlRenderer.renderUserDashboard(session, files, "File not found or access denied.", false), "text/html; charset=UTF-8");
         }
     }
 

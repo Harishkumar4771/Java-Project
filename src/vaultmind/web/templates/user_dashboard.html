@@ -536,6 +536,7 @@
                 infoPill.className = "pill";
                 infoPill.textContent = file.info;
 
+                // View Decrypted button
                 const actionLink = document.createElement("a");
                 actionLink.className = "action-link";
                 actionLink.href = file.viewUrl;
@@ -543,11 +544,56 @@
                 actionLink.rel = "noopener";
                 actionLink.textContent = "View Decrypted";
 
+                // Delete button
+                const deleteForm = document.createElement("form");
+                deleteForm.method = "post";
+                deleteForm.action = "/files/delete";
+                const deleteFileId = document.createElement("input");
+                deleteFileId.type = "hidden";
+                deleteFileId.name = "fileId";
+                deleteFileId.value = file.id;
+                const deleteBtn = document.createElement("button");
+                deleteBtn.type = "submit";
+                deleteBtn.className = "action-link";
+                deleteBtn.style.cssText = "background:none;border:1px solid #b24b29;cursor:pointer;color:#b24b29;font-weight:700;";
+                deleteBtn.textContent = "Delete";
+                deleteForm.append(deleteFileId, deleteBtn);
+
+                // Rename form
+                const renameForm = document.createElement("form");
+                renameForm.method = "post";
+                renameForm.action = "/files/rename";
+                const renameFileId = document.createElement("input");
+                renameFileId.type = "hidden";
+                renameFileId.name = "fileId";
+                renameFileId.value = file.id;
+                const renameInput = document.createElement("input");
+                renameInput.type = "text";
+                renameInput.name = "newFileName";
+                renameInput.placeholder = "New name...";
+                renameInput.style.cssText = "padding:6px 10px;border-radius:999px;border:1px solid #ccc;font:inherit;width:110px;";
+                const renameBtn = document.createElement("button");
+                renameBtn.type = "submit";
+                renameBtn.className = "action-link";
+                renameBtn.style.cssText = "background:none;border:1px solid #1d7c5b;cursor:pointer;color:#1d7c5b;font-weight:700;";
+                renameBtn.textContent = "Rename";
+                renameForm.append(renameFileId, renameInput, renameBtn);
+
+                // Action cell holding all three
+                const actionCell = document.createElement("td");
+                actionCell.style.display = "flex";
+                actionCell.style.gap = "8px";
+                actionCell.style.alignItems = "center";
+                actionCell.style.flexWrap = "wrap";
+                actionCell.appendChild(actionLink);
+                actionCell.appendChild(deleteForm);
+                actionCell.appendChild(renameForm);
+
                 row.append(
                     createCell(fileWrap),
                     createCell(infoPill),
                     createCell(file.uploaded),
-                    createCell(actionLink)
+                    actionCell
                 );
 
                 tableBody.insertBefore(row, emptyFilterRow);
